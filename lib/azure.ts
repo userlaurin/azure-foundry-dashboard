@@ -129,7 +129,7 @@ async function getAccountPoints(
 
   const data = await armFetch(`${account.id}/providers/Microsoft.Insights/metrics`, {
     'api-version': API_VERSION_MONITOR,
-    metricnames: 'ProcessedPromptTokens,GeneratedTokens',
+    metricnames: 'InputTokens,OutputTokens',
     metricnamespace: 'Microsoft.CognitiveServices/accounts',
     timespan: `${start.toISOString()}/${end.toISOString()}`,
     interval,
@@ -140,19 +140,21 @@ async function getAccountPoints(
   const points = new Map<string, UsagePoint>();
 
   for (const metric of data.value || []) {
-    const metricName: string = metric.name?.value ?? '';
-    const kind: 'input' | 'output' =
-      metricName === 'ProcessedPromptTokens' ? 'input' : 'output';
+    const metricName: string = metric.name?.value ?? metric.name?.localizedValue ?? '';
+    const kind: 'input' | 'output' = /inputtokens|prompttokens/i.test(metricName)
+      ? 'input'
+      : 'output';
     for (const ts of metric.timeseries || []) {
+      const meta: Array<{ name?: { value?: string }; value?: string }> =
+        ts.metadatavalues || ts.metadataValues || [];
       const deployment =
-        (ts.metadatavalues || []).find(
-          (m: any) => m.name?.value === 'ModelDeploymentName',
-        )?.value || 'unknown';
+        meta.find((m) => m.name?.value?.toLowerCase() === 'modeldeploymentname')
+          ?.value || 'unknown';
       const info = deployments.get(deployment);
       const model = info?.model ?? deployment;
       const modelVersion = info?.version ?? null;
       for (const d of ts.data || []) {
-        const total = d.total ?? 0;
+        const total = d.total ?? d.count ?? 0;
         if (!total) continue;
         const key = `${d.timeStamp}|${deployment}|${account.location}`;
         const existing =
@@ -174,6 +176,42 @@ async function getAccountPoints(
   }
 
   return Array.from(points.values());
+}
+
+export async function debugMetrics(tf: Timeframe): Promise<unknown> {
+  const { start, end, interval } = resolveTimeframe(tf);
+  const accounts = await listFoundryAccounts();
+  const out: Record<string, unknown> = { accounts, start: start.toISOString(), end: end.toISOString(), interval };
+
+  for (const a of accounts) {
+    const deployments = await listDeployments(a.id);
+    const metricDefs = await armFetch(
+      `${a.id}/providers/Microsoft.Insights/metricDefinitions`,
+      { 'api-version': API_VERSION_MONITOR, metricnamespace: 'Microsoft.CognitiveServices/accounts' },
+    ).catch((e: Error) => ({ error: e.message }));
+
+    const metrics = await armFetch(`${a.id}/providers/Microsoft.Insights/metrics`, {
+      'api-version': API_VERSION_MONITOR,
+      metricnames: 'InputTokens,OutputTokens',
+      metricnamespace: 'Microsoft.CognitiveServices/accounts',
+      timespan: `${start.toISOString()}/${end.toISOString()}`,
+      interval,
+      aggregation: 'Total',
+      $filter: "ModelDeploymentName eq '*'",
+    }).catch((e: Error) => ({ error: e.message }));
+
+    out[a.name] = {
+      location: a.location,
+      kind: a.kind,
+      deployments: Array.from(deployments.entries()),
+      metricDefinitions: Array.isArray((metricDefs as { value?: unknown[] }).value)
+        ? (metricDefs as { value: Array<{ name: { value: string } }> }).value.map((m) => m.name.value)
+        : metricDefs,
+      metrics,
+    };
+  }
+
+  return out;
 }
 
 export async function getUsage(tf: Timeframe): Promise<UsageResponse> {

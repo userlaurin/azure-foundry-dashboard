@@ -11,14 +11,54 @@ export interface PriceItem {
   priceType: string;
 }
 
-export async function fetchCognitiveServicesPrices(): Promise<PriceItem[]> {
+export type ManualPrices = Record<string, { input: number; output: number }>;
+
+export interface PricesResponse {
+  items: PriceItem[];
+  manual: ManualPrices;
+}
+
+export async function fetchCognitiveServicesPrices(): Promise<PricesResponse> {
   const res = await fetch('/api/prices');
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error(body.error ?? `Prices ${res.status}`);
   }
   const body = await res.json();
-  return body.items as PriceItem[];
+  return {
+    items: (body.items ?? []) as PriceItem[],
+    manual: (body.manual ?? {}) as ManualPrices,
+  };
+}
+
+function normalizeModelKey(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+export function findManualPrice(
+  manual: ManualPrices,
+  modelName: string,
+  kind: 'input' | 'output',
+): number | null {
+  if (!manual || Object.keys(manual).length === 0) return null;
+  const target = normalizeModelKey(modelName);
+  if (!target) return null;
+  let best: { key: string; entry: { input: number; output: number } } | null = null;
+  for (const [key, entry] of Object.entries(manual)) {
+    const normKey = normalizeModelKey(key);
+    if (normKey === target) {
+      best = { key: normKey, entry };
+      break;
+    }
+    if (target.startsWith(normKey) || normKey.startsWith(target)) {
+      if (!best || normKey.length > best.key.length) {
+        best = { key: normKey, entry };
+      }
+    }
+  }
+  if (!best) return null;
+  const per1k = kind === 'input' ? best.entry.input : best.entry.output;
+  return per1k / 1000;
 }
 
 const INPUT_KWS = new Set(['input', 'inp', 'inpt']);
@@ -141,7 +181,13 @@ export function findPrice(
   kind: 'input' | 'output',
   _region: string,
   modelVersion?: string,
+  manual?: ManualPrices,
 ): number | null {
+  if (manual) {
+    const manualPrice = findManualPrice(manual, modelName, kind);
+    if (manualPrice !== null) return manualPrice;
+  }
+
   const modelTokens = tokenize(modelName);
   if (modelTokens.length === 0) return null;
 

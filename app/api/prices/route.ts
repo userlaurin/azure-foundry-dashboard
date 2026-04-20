@@ -1,5 +1,7 @@
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { NextResponse } from 'next/server';
-import type { PriceItem } from '@/lib/pricing';
+import type { ManualPrices, PriceItem } from '@/lib/pricing';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -42,10 +44,24 @@ async function getPrices(): Promise<PriceItem[]> {
   return inflight;
 }
 
+async function loadManualPrices(): Promise<ManualPrices> {
+  try {
+    const raw = await readFile(
+      join(process.cwd(), 'data', 'manual-prices.json'),
+      'utf8',
+    );
+    const parsed = JSON.parse(raw);
+    return parsed.models ?? {};
+  } catch (err) {
+    console.error('[api/prices] failed to load manual prices:', err);
+    return {};
+  }
+}
+
 export async function GET() {
   try {
-    const items = await getPrices();
-    return NextResponse.json({ items });
+    const [items, manual] = await Promise.all([getPrices(), loadManualPrices()]);
+    return NextResponse.json({ items, manual });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('[api/prices]', message);

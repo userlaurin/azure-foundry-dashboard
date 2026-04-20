@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   fetchCognitiveServicesPrices,
   findPrice,
+  type ManualPrices,
   type PriceItem,
 } from '@/lib/pricing';
 import type { Timeframe } from '@/lib/timeframe';
@@ -37,6 +38,7 @@ const REFRESH_MS = Number(process.env.NEXT_PUBLIC_REFRESH_MS ?? 5000);
 export function Dashboard() {
   const [timeframe, setTimeframe] = useState<Timeframe>('24h');
   const [prices, setPrices] = useState<PriceItem[] | null>(null);
+  const [manualPrices, setManualPrices] = useState<ManualPrices>({});
   const [usage, setUsage] = useState<UsageResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -45,8 +47,11 @@ export function Dashboard() {
   useEffect(() => {
     let cancelled = false;
     fetchCognitiveServicesPrices()
-      .then((items) => {
-        if (!cancelled) setPrices(items);
+      .then(({ items, manual }) => {
+        if (!cancelled) {
+          setPrices(items);
+          setManualPrices(manual);
+        }
       })
       .catch((e) => {
         if (!cancelled) setError(`Pricing fetch failed: ${e.message}`);
@@ -94,13 +99,13 @@ export function Dashboard() {
     if (!usage || !prices) return [];
     return usage.points.map((p) => {
       const inPrice =
-        findPrice(prices, p.model, 'input', p.region, p.modelVersion ?? undefined) ?? 0;
+        findPrice(prices, p.model, 'input', p.region, p.modelVersion ?? undefined, manualPrices) ?? 0;
       const outPrice =
-        findPrice(prices, p.model, 'output', p.region, p.modelVersion ?? undefined) ?? 0;
+        findPrice(prices, p.model, 'output', p.region, p.modelVersion ?? undefined, manualPrices) ?? 0;
       const cost = p.inputTokens * inPrice + p.outputTokens * outPrice;
       return { ...p, cost };
     });
-  }, [usage, prices]);
+  }, [usage, prices, manualPrices]);
 
   const byTime = useMemo(() => {
     const map = new Map<
