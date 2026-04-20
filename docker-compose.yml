@@ -1,0 +1,30 @@
+services:
+  dashboard:
+    image: node:22-bookworm
+    container_name: azure-foundry-dashboard
+    restart: unless-stopped
+    working_dir: /app
+    ports:
+      - "3000:3000"
+    environment:
+      AZURE_SUBSCRIPTION_ID: "${AZURE_SUBSCRIPTION_ID}"
+      AZURE_RESOURCE_GROUP: "${AZURE_RESOURCE_GROUP:-}"
+      # Optional — skip the az CLI install and use a pre-fetched bearer token.
+      AZURE_TOKEN: "${AZURE_TOKEN:-}"
+      NEXT_PUBLIC_REFRESH_MS: "${NEXT_PUBLIC_REFRESH_MS:-5000}"
+      NEXT_TELEMETRY_DISABLED: "1"
+    volumes:
+      - .:/app
+      # Reuse the host's `az login` session for token auth.
+      - ${HOME}/.azure:/root/.azure
+    command:
+      - bash
+      - -lc
+      - |
+        set -e
+        if [ -z "$$AZURE_TOKEN" ] && ! command -v az >/dev/null 2>&1; then
+          curl -sL https://aka.ms/InstallAzureCLIDeb | bash
+        fi
+        npm install
+        npm run build
+        npm run start
