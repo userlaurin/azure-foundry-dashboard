@@ -32,6 +32,42 @@ Open http://localhost:3000.
 
 If `AZURE_TOKEN` is unset, the server runs `az account get-access-token --resource https://management.azure.com` and caches the result for 50 min.
 
+## Run with Docker Compose
+
+One-command deployment using a stock `node:22-bookworm` image — no Dockerfile needed.
+
+```bash
+az login                     # on the host, once
+cp .env.example .env         # or set vars inline
+docker compose up -d
+docker compose logs -f       # watch first-boot install (~1–2 min)
+```
+
+Open http://localhost:3000.
+
+### How it's wired
+
+- **Image**: stock `node:22-bookworm`, no custom build.
+- **Startup command**: installs the Azure CLI (unless `AZURE_TOKEN` is set), then runs `npm install && npm run build && npm run start`.
+- **Source bind-mount**: the repo is mounted at `/app`, so code edits appear inside the container — restart with `docker compose restart dashboard` to rebuild.
+- **Auth mount**: `~/.azure` is bind-mounted to `/root/.azure` so the container reuses your existing `az login` session and refreshes tokens transparently.
+- **Manual prices**: [data/manual-prices.json](data/manual-prices.json) is part of the bind-mount, so edits take effect on the next `/api/prices` call (1 h server cache).
+
+### Variables used by compose
+
+`docker-compose.yml` reads these from your shell or a `.env` file next to it:
+
+| Var | Required | Purpose |
+|---|---|---|
+| `AZURE_SUBSCRIPTION_ID` | yes | Passed into the container. |
+| `AZURE_RESOURCE_GROUP` | no | Optional RG filter. |
+| `AZURE_TOKEN` | no | If set, the container skips the `az` CLI install and uses this bearer token directly (expires in ~1 h). |
+| `NEXT_PUBLIC_REFRESH_MS` | no | Client poll interval. Default `5000`. |
+
+### Deploying on a server (no host `az login`)
+
+For headless hosts, set `AZURE_TOKEN` to a pre-fetched bearer token and drop the `~/.azure` mount. You'll need to refresh the token before it expires (~1 h) — easiest path is a service principal that generates tokens on the host and writes them into the container env, or extending [lib/azure.ts](lib/azure.ts) to support client-credentials auth directly.
+
 ## Notes / caveats
 
 - Azure Monitor metrics have a few minutes of latency — the last few polls may show zeros for the current bucket until the metric pipeline catches up.
