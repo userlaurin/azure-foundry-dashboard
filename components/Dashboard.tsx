@@ -13,6 +13,9 @@ import { TotalsCards } from './TotalsCards';
 import { UsageChart } from './charts/UsageChart';
 import { CostChart } from './charts/CostChart';
 import { ModelBarChart } from './charts/ModelBarChart';
+import { DeploymentTokensChart } from './charts/DeploymentTokensChart';
+import { DeploymentCostChart } from './charts/DeploymentCostChart';
+import { DeploymentBarChart } from './charts/DeploymentBarChart';
 
 interface UsagePoint {
   t: string;
@@ -103,7 +106,10 @@ export function Dashboard() {
       const outPrice =
         findPrice(prices, p.model, 'output', p.region, p.modelVersion ?? undefined, manualPrices) ?? 0;
       const cost = p.inputTokens * inPrice + p.outputTokens * outPrice;
-      return { ...p, cost };
+      const tokens = p.inputTokens + p.outputTokens;
+      const deploymentKey = `${p.deployment}|${p.model}|${p.region}`;
+      const deploymentLabel = `${p.deployment} · ${p.model} · ${p.region}`;
+      return { ...p, cost, tokens, deploymentKey, deploymentLabel };
     });
   }, [usage, prices, manualPrices]);
 
@@ -137,6 +143,73 @@ export function Dashboard() {
       existing.cost += p.cost;
       map.set(p.model, existing);
     }
+    return Array.from(map.values()).sort((a, b) => b.cost - a.cost);
+  }, [enriched]);
+
+  const byDeploymentTime = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        t: string;
+        deployment: string;
+        inputTokens: number;
+        outputTokens: number;
+        tokens: number;
+        cost: number;
+      }
+    >();
+
+    for (const p of enriched) {
+      const key = `${p.t}|${p.deploymentKey}`;
+      const existing =
+        map.get(key) ??
+        {
+          t: p.t,
+          deployment: p.deploymentLabel,
+          inputTokens: 0,
+          outputTokens: 0,
+          tokens: 0,
+          cost: 0,
+        };
+      existing.inputTokens += p.inputTokens;
+      existing.outputTokens += p.outputTokens;
+      existing.tokens += p.tokens;
+      existing.cost += p.cost;
+      map.set(key, existing);
+    }
+
+    return Array.from(map.values()).sort((a, b) => a.t.localeCompare(b.t));
+  }, [enriched]);
+
+  const byDeploymentTotals = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        deployment: string;
+        inputTokens: number;
+        outputTokens: number;
+        tokens: number;
+        cost: number;
+      }
+    >();
+
+    for (const p of enriched) {
+      const existing =
+        map.get(p.deploymentKey) ??
+        {
+          deployment: p.deploymentLabel,
+          inputTokens: 0,
+          outputTokens: 0,
+          tokens: 0,
+          cost: 0,
+        };
+      existing.inputTokens += p.inputTokens;
+      existing.outputTokens += p.outputTokens;
+      existing.tokens += p.tokens;
+      existing.cost += p.cost;
+      map.set(p.deploymentKey, existing);
+    }
+
     return Array.from(map.values()).sort((a, b) => b.cost - a.cost);
   }, [enriched]);
 
@@ -207,6 +280,30 @@ export function Dashboard() {
             <ModelBarChart data={byModel} />
           ) : (
             <div className="empty">No model usage in this window.</div>
+          )}
+        </div>
+        <div className="panel wide">
+          <h2>Deployment token usage over time</h2>
+          {byDeploymentTime.length > 0 ? (
+            <DeploymentTokensChart data={byDeploymentTime} />
+          ) : (
+            <div className="empty">No deployment usage in this window.</div>
+          )}
+        </div>
+        <div className="panel wide">
+          <h2>Deployment cost over time</h2>
+          {byDeploymentTime.length > 0 ? (
+            <DeploymentCostChart data={byDeploymentTime} />
+          ) : (
+            <div className="empty">No deployment cost in this window.</div>
+          )}
+        </div>
+        <div className="panel wide">
+          <h2>Top deployments by cost</h2>
+          {byDeploymentTotals.length > 0 ? (
+            <DeploymentBarChart data={byDeploymentTotals} />
+          ) : (
+            <div className="empty">No deployment totals in this window.</div>
           )}
         </div>
       </section>

@@ -9,9 +9,31 @@ const API_VERSION_MONITOR = '2024-02-01';
 const API_VERSION_COG = '2023-05-01';
 
 const TOKEN_TTL_MS = 50 * 60 * 1000;
+const TOKEN_EXPIRY_SKEW_MS = 2 * 60 * 1000;
 
 let cachedToken: { value: string; expiresAt: number } | null = null;
 let tokenPromise: Promise<{ value: string; expiresAt: number }> | null = null;
+
+function parseExpiresAt(parsed: any): number {
+  const now = Date.now();
+
+  if (typeof parsed.expires_on === 'number') {
+    return Math.max(now + 60_000, parsed.expires_on * 1000 - TOKEN_EXPIRY_SKEW_MS);
+  }
+
+  if (typeof parsed.expiresOn === 'string') {
+    const ts = Date.parse(parsed.expiresOn);
+    if (!Number.isNaN(ts)) {
+      return Math.max(now + 60_000, ts - TOKEN_EXPIRY_SKEW_MS);
+    }
+  }
+
+  if (typeof parsed.expiresIn === 'number') {
+    return Math.max(now + 60_000, now + parsed.expiresIn * 1000 - TOKEN_EXPIRY_SKEW_MS);
+  }
+
+  return now + TOKEN_TTL_MS;
+}
 
 async function fetchTokenFromAz(): Promise<{ value: string; expiresAt: number }> {
   const { stdout } = await execAsync(
@@ -20,13 +42,13 @@ async function fetchTokenFromAz(): Promise<{ value: string; expiresAt: number }>
   );
   const parsed = JSON.parse(stdout);
   if (!parsed.accessToken) throw new Error('az CLI returned no accessToken');
-  return { value: parsed.accessToken, expiresAt: Date.now() + TOKEN_TTL_MS };
+  return { value: parsed.accessToken, expiresAt: parseExpiresAt(parsed) };
 }
 
-async function getToken(): Promise<string> {
+async function getToken(forceRefresh = false): Promise<string> {
   const override = process.env.AZURE_TOKEN;
   if (override) return override;
-  if (cachedToken && cachedToken.expiresAt > Date.now()) return cachedToken.value;
+  if (!forceRefresh && cachedToken && cachedToken.expiresAt > Date.now()) return cachedToken.value;
   if (!tokenPromise) {
     tokenPromise = fetchTokenFromAz().finally(() => {
       tokenPromise = null;
@@ -43,18 +65,31 @@ function getSubscription(): string {
 }
 
 async function armFetch(path: string, params: Record<string, string>): Promise<any> {
-  const token = await getToken();
   const url = new URL(ARM + path);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
-  const res = await fetch(url.toString(), {
-    headers: { Authorization: `Bearer ${token}` },
-    cache: 'no-store',
-  });
-  if (!res.ok) {
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const forceRefresh = attempt === 1;
+    const token = await getToken(forceRefresh);
+    const res = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: 'no-store',
+    });
+
+    if (res.ok) return res.json();
+
+    if (!process.env.AZURE_TOKEN && (res.status === 401 || res.status === 403) && attempt === 0) {
+      cachedToken = null;
+      const body = await res.text();
+      console.warn(`[azure] token rejected (${res.status}), refreshing once: ${body.slice(0, 200)}`);
+      continue;
+    }
+
     const text = await res.text();
     throw new Error(`Azure ${res.status} ${res.statusText}: ${text.slice(0, 500)}`);
   }
-  return res.json();
+
+  throw new Error('Azure request failed after retry');
 }
 
 export interface FoundryAccount {

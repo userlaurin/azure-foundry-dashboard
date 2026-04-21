@@ -4,7 +4,7 @@ A Next.js dashboard that pulls Azure Foundry / OpenAI token usage from Azure Mon
 
 ## How it works
 
-- **Server (`/api/usage`)**: lists your Cognitive Services accounts (kind `OpenAI` or `AIServices`) in the subscription, then calls Azure Monitor for `ProcessedPromptTokens` and `GeneratedTokens` split by `ModelName`. Needs a bearer token — either set `AZURE_TOKEN`, or just be logged in with `az login` and the server shells out to `az account get-access-token` and caches it.
+- **Server (`/api/usage`)**: lists your Cognitive Services accounts (kind `OpenAI` or `AIServices`) in the subscription, then calls Azure Monitor for `ProcessedPromptTokens` and `GeneratedTokens` split by `ModelName`. Needs a bearer token — either set `AZURE_TOKEN`, or just be logged in with `az login` and the server shells out to `az account get-access-token`, reusing and refreshing tokens automatically.
 - **Client**: fetches the Azure Retail Prices API directly (it's public + CORS-friendly), matches each model to its input/output unit price, and multiplies by tokens. Polls the server every 5s.
 
 ## Setup
@@ -27,10 +27,10 @@ Open http://localhost:3000.
 |---|---|---|
 | `AZURE_SUBSCRIPTION_ID` | yes | Subscription to list Cognitive Services accounts from. |
 | `AZURE_RESOURCE_GROUP` | no | Restrict to one resource group. |
-| `AZURE_TOKEN` | no | Paste a raw bearer token to skip the `az` CLI path. Expires in ~1h. |
+| `AZURE_TOKEN` | no | Paste a raw bearer token to skip the `az` CLI path. Usually expires in ~1h and must be rotated manually. |
 | `NEXT_PUBLIC_REFRESH_MS` | no | Poll interval for the browser. Default `5000`. |
 
-If `AZURE_TOKEN` is unset, the server runs `az account get-access-token --resource https://management.azure.com` and caches the result for 50 min.
+If `AZURE_TOKEN` is unset, the server runs `az account get-access-token --resource https://management.azure.com`, uses the returned expiry time, and refreshes automatically when close to expiry (or once immediately after a 401/403).
 
 ## Run with Docker Compose
 
