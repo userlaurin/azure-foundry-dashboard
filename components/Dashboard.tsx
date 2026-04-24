@@ -2,12 +2,12 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  fetchCognitiveServicesPrices,
   findPrice,
   type ManualPrices,
   type PriceItem,
 } from '@/lib/pricing';
 import type { Timeframe } from '@/lib/timeframe';
+import { CloudSwitcher, type CloudProvider } from './CloudSwitcher';
 import { TimeframeSwitcher } from './TimeframeSwitcher';
 import { TotalsCards } from './TotalsCards';
 import { UsageChart } from './charts/UsageChart';
@@ -39,6 +39,7 @@ interface UsageResponse {
 const REFRESH_MS = Number(process.env.NEXT_PUBLIC_REFRESH_MS ?? 5000);
 
 export function Dashboard() {
+  const [cloudProvider, setCloudProvider] = useState<CloudProvider>('azure');
   const [timeframe, setTimeframe] = useState<Timeframe>('24h');
   const [prices, setPrices] = useState<PriceItem[] | null>(null);
   const [manualPrices, setManualPrices] = useState<ManualPrices>({});
@@ -47,22 +48,35 @@ export function Dashboard() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // Reset all data when switching cloud provider
+  useEffect(() => {
+    setPrices(null);
+    setManualPrices({});
+    setUsage(null);
+    setError(null);
+    setLastUpdated(null);
+  }, [cloudProvider]);
+
   useEffect(() => {
     let cancelled = false;
-    fetchCognitiveServicesPrices()
-      .then(({ items, manual }) => {
+    const url = cloudProvider === 'azure' ? '/api/prices' : '/api/prices-aws';
+    fetch(url)
+      .then((r) =>
+        r.ok ? r.json() : r.json().then((b: { error?: string }) => Promise.reject(new Error(b.error ?? r.statusText))),
+      )
+      .then(({ items, manual }: { items: PriceItem[]; manual: ManualPrices }) => {
         if (!cancelled) {
-          setPrices(items);
-          setManualPrices(manual);
+          setPrices(items ?? []);
+          setManualPrices(manual ?? {});
         }
       })
-      .catch((e) => {
+      .catch((e: Error) => {
         if (!cancelled) setError(`Pricing fetch failed: ${e.message}`);
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [cloudProvider]);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,7 +86,8 @@ export function Dashboard() {
       if (cancelled) return;
       setLoading(true);
       try {
-        const res = await fetch(`/api/usage?timeframe=${timeframe}`);
+        const endpoint = cloudProvider === 'azure' ? '/api/usage' : '/api/usage-aws';
+        const res = await fetch(`${endpoint}?timeframe=${timeframe}`);
         const json = await res.json();
         if (!res.ok) throw new Error(json.error || res.statusText);
         if (!cancelled) {
@@ -96,7 +111,7 @@ export function Dashboard() {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [timeframe]);
+  }, [timeframe, cloudProvider]);
 
   const enriched = useMemo(() => {
     if (!usage || !prices) return [];
@@ -233,14 +248,20 @@ export function Dashboard() {
     <div className="dashboard">
       <header className="hdr">
         <div>
-          <h1>Azure Foundry · Usage &amp; Cost</h1>
+          <h1>{cloudProvider === 'azure' ? 'Azure Foundry' : 'AWS Bedrock'} · Usage &amp; Cost</h1>
           <p className="sub">
-            {usage?.accounts.length ?? 0} account
+            {usage?.accounts.length ?? 0}{' '}
+            {cloudProvider === 'azure' ? 'account' : 'region'}
             {(usage?.accounts.length ?? 0) === 1 ? '' : 's'} ·{' '}
-            {pricesReady ? `${prices!.length} price entries` : 'loading prices…'}
+            {pricesReady
+              ? cloudProvider === 'azure'
+                ? `${prices!.length} price entries`
+                : 'Bedrock prices loaded'
+              : 'loading prices…'}
           </p>
         </div>
         <div className="controls">
+          <CloudSwitcher value={cloudProvider} onChange={setCloudProvider} />
           <TimeframeSwitcher value={timeframe} onChange={setTimeframe} />
           <div className="status">
             <span className={loading ? 'dot loading' : 'dot'} />

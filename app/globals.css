@@ -60,6 +60,43 @@ body {
   align-items: center;
 }
 
+.cloud-switcher {
+  display: inline-flex;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 2px;
+}
+
+.cloud-switcher button {
+  background: transparent;
+  border: 0;
+  color: var(--text-dim);
+  padding: 6px 18px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  transition: all 120ms ease;
+}
+
+.cloud-switcher button:hover {
+  color: var(--text);
+}
+
+.cloud-switcher button.active.azure {
+  background: var(--panel-2);
+  color: var(--accent);
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.cloud-switcher button.active.aws {
+  background: var(--panel-2);
+  color: var(--blue);
+  box-shadow: 0 0 0 1px var(--border);
+}
+
 .timeframes {
   display: inline-flex;
   background: var(--panel);

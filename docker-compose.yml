@@ -5,7 +5,7 @@ services:
     restart: unless-stopped
     working_dir: /app
     ports:
-      - "3000:3000"
+      - "3010:3000"
     environment:
       AZURE_SUBSCRIPTION_ID: "${AZURE_SUBSCRIPTION_ID}"
       AZURE_RESOURCE_GROUP: "${AZURE_RESOURCE_GROUP:-}"
@@ -13,10 +13,19 @@ services:
       AZURE_TOKEN: "${AZURE_TOKEN:-}"
       NEXT_PUBLIC_REFRESH_MS: "${NEXT_PUBLIC_REFRESH_MS:-5000}"
       NEXT_TELEMETRY_DISABLED: "1"
+      # AWS — credentials for CloudWatch (Bedrock usage metrics)
+      AWS_REGION: "${AWS_REGION:-us-east-1}"
+      AWS_BEDROCK_REGIONS: "${AWS_BEDROCK_REGIONS:-}"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-}"
+      AWS_SESSION_TOKEN: "${AWS_SESSION_TOKEN:-}"
+      AWS_PROFILE: "${AWS_PROFILE:-}"
     volumes:
       - .:/app
       # Reuse the host's `az login` session for token auth.
       - ${HOME}/.azure:/root/.azure
+      # Reuse the host's AWS CLI config/credentials for CloudWatch auth.
+      - ${HOME}/.aws:/root/.aws:ro
     command:
       - bash
       - -lc

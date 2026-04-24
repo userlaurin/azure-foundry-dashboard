@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@aws-sdk/client-cloudwatch": "^3.1036.0",
     "chart.js": "^4.4.6",
     "next": "^15.1.0",
     "react": "^19.0.0",

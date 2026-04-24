@@ -1,0 +1,27 @@
+{
+  "_comment": "Prices are USD per 1,000 tokens. Keys are Bedrock model ID prefixes (partial matches work). Edit freely — the app reloads this on each /api/prices-aws call.",
+  "models": {
+    "anthropic.claude-opus-4": { "input": 0.015, "output": 0.075 },
+    "anthropic.claude-3-5-sonnet": { "input": 0.003, "output": 0.015 },
+    "anthropic.claude-3-5-haiku": { "input": 0.0008, "output": 0.004 },
+    "anthropic.claude-3-opus": { "input": 0.015, "output": 0.075 },
+    "anthropic.claude-3-sonnet": { "input": 0.003, "output": 0.015 },
+    "anthropic.claude-3-haiku": { "input": 0.00025, "output": 0.00125 },
+    "amazon.titan-text-express": { "input": 0.0002, "output": 0.0006 },
+    "amazon.titan-text-lite": { "input": 0.00015, "output": 0.0002 },
+    "amazon.nova-pro": { "input": 0.0008, "output": 0.0032 },
+    "amazon.nova-lite": { "input": 0.00006, "output": 0.00024 },
+    "amazon.nova-micro": { "input": 0.000035, "output": 0.00014 },
+    "meta.llama3-70b": { "input": 0.00099, "output": 0.00099 },
+    "meta.llama3-8b": { "input": 0.0003, "output": 0.0006 },
+    "meta.llama3-2-90b": { "input": 0.002, "output": 0.002 },
+    "meta.llama3-2-11b": { "input": 0.00016, "output": 0.00016 },
+    "mistral.mistral-large": { "input": 0.004, "output": 0.012 },
+    "mistral.mistral-small": { "input": 0.001, "output": 0.003 },
+    "mistral.mistral-7b": { "input": 0.00015, "output": 0.0002 },
+    "ai21.jamba-1-5-large": { "input": 0.002, "output": 0.008 },
+    "ai21.jamba-1-5-mini": { "input": 0.0002, "output": 0.0004 },
+    "cohere.command-r-plus": { "input": 0.003, "output": 0.015 },
+    "cohere.command-r": { "input": 0.0005, "output": 0.0015 }
+  }
+}
