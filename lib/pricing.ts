@@ -196,6 +196,11 @@ export function findPrice(
     return findEmbeddingPrice(items, modelTokens);
   }
 
+  // Some meter names omit the leading "gpt" prefix (e.g. "5.3 codex inp Gl 1M Tokens").
+  // Try matching both the full token list and a prefix-stripped variant.
+  const matchTokenVariants: string[][] = [modelTokens];
+  if (modelTokens[0] === 'gpt') matchTokenVariants.push(modelTokens.slice(1));
+
   const modelHasMini = modelTokens.includes('mini');
   const modelHasNano = modelTokens.includes('nano');
   const modelHasPro = modelTokens.includes('pro');
@@ -226,7 +231,11 @@ export function findPrice(
     if (kind === 'input' && (!hasInput || hasOutput)) continue;
     if (kind === 'output' && (!hasOutput || hasInput)) continue;
 
-    const idx = containsTokens(meterTokens, modelTokens);
+    let idx = -1;
+    for (const variant of matchTokenVariants) {
+      idx = containsTokens(meterTokens, variant);
+      if (idx >= 0) break;
+    }
     if (idx < 0) continue;
 
     const after = meterTokens.slice(idx + modelTokens.length);
